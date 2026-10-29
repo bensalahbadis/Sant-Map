@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SantéMap Algérie - صحة ماب الجزائر</title>
+    
+    <!-- Meta tags pour PWA Mobile (iOS & Android) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0d9488">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Police Google Cairo & Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome (CDN Cloudflare) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
+        html[dir="rtl"] { font-family: 'Cairo', 'Inter', sans-serif; }
+
+        /* ================= ÉCRAN BLANC ET NOUVELLE ANIMATION ================= */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background-color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
+        }
+
+        .anim-santemap-logo {
+            animation: logoCinematicZoom 3.5s cubic-bezier(0.35, 0, 0.25, 1) forwards;
+            will-change: transform, opacity, filter;
+        }
+
+        @keyframes logoCinematicZoom {
+            0% { opacity: 0; transform: scale(1.18); filter: blur(6px); }
+            22% { opacity: 1; transform: scale(0.92); filter: blur(0px); }
+            40% { opacity: 1; transform: scale(0.98); filter: blur(0px); }
+            78% { opacity: 1; transform: scale(3.8); filter: blur(3px); }
+            100% { opacity: 0; transform: scale(7.8); filter: blur(28px); visibility: hidden; }
+        }
+
+        #map-container {
+            width: 100%;
+            height: 600px;
+            min-height: 600px;
+            border-radius: 1rem;
+            overflow: hidden;
+            background-color: #f1f5f9;
+            position: relative;
+        }
+        #leaflet-map { width: 100% !important; height: 100% !important; z-index: 10; }
+        #gmap-iframe { width: 100% !important; height: 100% !important; border: 0; }
+        .pulse-badge { animation: pulse-ring 2s infinite; }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 4px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body class="bg-slate-50 text-gray-800 flex flex-col min-h-screen">
+
+    <!-- ÉCRAN DE LANCEMENT BLANC (LOGO CROISSANT SANTÉMAP) -->
+    <div id="splash-screen">
+        <div class="anim-santemap-logo flex flex-col items-center justify-center text-center p-6 select-none">
+            <div class="w-28 h-28 sm:w-32 sm:h-32 drop-shadow-2xl mb-4">
+                <svg viewBox="0 0 100 100" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="splashTealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#14b8a6"/>
+                            <stop offset="50%" stop-color="#0d9488"/>
+                            <stop offset="100%" stop-color="#047857"/>
+                        </linearGradient>
+                    </defs>
+                    <rect width="100" height="100" rx="22" fill="url(#splashTealGrad)"/>
+                    <path d="M 27 41 L 27 65 A 9 9 0 0 0 36 74 L 54 74" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+                    <path d="M 42 27 L 62 27 A 8 8 0 0 1 70 35 L 70 54 A 4 4 0 0 1 68.8 56.8 L 59.8 65.8 A 4 4 0 0 1 57 67 L 42 67 A 8 8 0 0 1 34 59 L 34 35 A 8 8 0 0 1 42 27 Z" fill="#FFFFFF"/>
+                    <path d="M 61.86 37.8 A 13.5 13.5 0 1 0 61.86 56.2 A 11.2 11.2 0 0 1 61.86 37.8 Z" fill="url(#splashTealGrad)"/>
+                </svg>
+            </div>
+            <div>
+                <span class="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight">Santé<span class="text-teal-600">Map</span></span>
+                <span class="block text-xs sm:text-sm font-bold text-teal-700 uppercase tracking-[0.3em] mt-1.5">Algérie</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. BANDEAU D'URGENCE (TRILINGUE) -->
+    <div class="bg-slate-900 text-slate-300 text-xs py-2 px-4 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                <span data-i18n="top_network" class="font-medium text-slate-200">Réseau Sanitaire National • 58 Wilayas</span>
+            </div>
+            <div class="flex items-center flex-wrap gap-4 text-[11px]">
+                <a href="tel:14" class="hover:text-white transition"><i class="fa-solid fa-fire-extinguisher text-red-400 mx-1"></i> <span data-i18n="emergency_pc">Protection Civile</span> : <strong class="text-white">14</strong></a>
+                <a href="tel:1021" class="hover:text-white transition"><i class="fa-solid fa-truck-medical text-amber-400 mx-1"></i> <span data-i18n="emergency_samu">SAMU</span> : <strong class="text-white">1021</strong></a>
+                <a href="tel:1548" class="hover:text-white transition"><i class="fa-solid fa-shield-halved text-blue-400 mx-1"></i> <span data-i18n="emergency_police">Police</span> : <strong class="text-white">1548</strong></a>
+                <a href="tel:1055" class="hover:text-white transition"><i class="fa-solid fa-person-military-pointing text-teal-400 mx-1"></i> <span data-i18n="emergency_gendarmerie">Gendarmerie</span> : <strong class="text-white">1055</strong></a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. NAVIGATION (AVEC BOUTON TÉLÉCHARGER L'APPLICATION) -->
+    <header class="bg-white border-b shadow-sm sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3 rtl:space-x-reverse cursor-pointer" onclick="closeDashboard(); resetAllFilters();">
+                <div class="w-10 h-10 shadow-md rounded-xl overflow-hidden shrink-0">
+                    <svg viewBox="0 0 100 100" class="w-full h-full">
+                        <defs>
+                            <linearGradient id="navTealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#14b8a6"/>
+                                <stop offset="50%" stop-color="#0d9488"/>
+                                <stop offset="100%" stop-color="#047857"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="100" height="100" rx="22" fill="url(#navTealGrad)"/>
+                        <path d="M 27 41 L 27 65 A 9 9 0 0 0 36 74 L 54 74" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+                        <path d="M 42 27 L 62 27 A 8 8 0 0 1 70 35 L 70 54 A 4 4 0 0 1 68.8 56.8 L 59.8 65.8 A 4 4 0 0 1 57 67 L 42 67 A 8 8 0 0 1 34 59 L 34 35 A 8 8 0 0 1 42 27 Z" fill="#FFFFFF"/>
+                        <path d="M 61.86 37.8 A 13.5 13.5 0 1 0 61.86 56.2 A 11.2 11.2 0 0 1 61.86 37.8 Z" fill="url(#navTealGrad)"/>
+                    </svg>
+                </div>
+                <div>
+                    <span class="text-xl font-extrabold text-gray-900 tracking-tight">Santé<span class="text-teal-600">Map</span></span>
+                    <span data-i18n="brand_sub" class="block text-[10px] text-teal-700 font-bold uppercase tracking-wider">Algérie</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 sm:space-x-3 rtl:space-x-reverse">
+                <!-- SÉLECTEUR DE LANGUE -->
+                <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                    <button onclick="setLanguage('fr')" id="lang-btn-fr" class="px-2 py-1 rounded-lg transition">FR</button>
+                    <button onclick="setLanguage('ar')" id="lang-btn-ar" class="px-2 py-1 rounded-lg transition">العربية</button>
+                    <button onclick="setLanguage('en')" id="lang-btn-en" class="px-2 py-1 rounded-lg transition">EN</button>
+                </div>
+
+                <!-- NOUVEAU BOUTON : TÉLÉCHARGER L'APPLICATION MOBILE -->
+                <button onclick="openModal('download-modal')" class="text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm border border-slate-700">
+                    <i class="fa-solid fa-mobile-screen-button text-teal-400 text-sm"></i>
+                    <span class="hidden md:inline">Télécharger l'application</span>
+                    <span class="md:hidden">App</span>
+                </button>
+
+                <!-- BOUTON ESPACE PRO / MON COMPTE -->
+                <div id="auth-buttons-zone" class="flex items-center gap-2">
+                    <button onclick="openModal('login-modal')" class="text-xs font-semibold text-slate-700 hover:bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 transition hidden sm:inline-block">
+                        Connexion
+                    </button>
+                    <button onclick="openModal('register-modal')" class="text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+                        <i class="fa-solid fa-user-doctor"></i>
+                        <span class="hidden sm:inline">+ Inscrire un Cabinet</span>
+                        <span class="sm:hidden">+ Inscrire</span>
+                    </button>
+                </div>
+
+                <div id="logged-user-zone" class="hidden flex items-center gap-2">
+                    <button onclick="openDashboard()" class="text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200 px-3 py-2 rounded-xl hover:bg-teal-100 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-circle-user text-teal-600 text-base"></i>
+                        <span id="nav-user-name">Mon Compte</span>
+                    </button>
+                    <button onclick="logoutUser()" title="Se déconnecter" class="text-slate-400 hover:text-red-600 p-2 text-sm">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ======================================================== -->
+    <!-- MODAL : TÉLÉCHARGER L'APPLICATION SANTÉMAP (ANDROID/IOS) -->
+    <!-- ======================================================== -->
+    <div id="download-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-gray-100 text-start animate-fade-in relative">
+            <button onclick="closeModal('download-modal')" class="absolute top-5 right-5 text-gray-400 hover:text-gray-600 text-2xl font-bold">
+                &times;
+            </button>
+
+            <div class="flex items-center space-x-3 mb-4">
+                <div class="w-12 h-12 shadow-md rounded-2xl overflow-hidden shrink-0">
+                    <svg viewBox="0 0 100 100" class="w-full h-full">
+                        <rect width="100" height="100" rx="22" fill="#0d9488"/>
+                        <path d="M 27 41 L 27 65 A 9 9 0 0 0 36 74 L 54 74" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+                        <path d="M 42 27 L 62 27 A 8 8 0 0 1 70 35 L 70 54 A 4 4 0 0 1 68.8 56.8 L 59.8 65.8 A 4 4 0 0 1 57 67 L 42 67 A 8 8 0 0 1 34 59 L 34 35 A 8 8 0 0 1 42 27 Z" fill="#FFFFFF"/>
+                        <path d="M 61.86 37.8 A 13.5 13.5 0 1 0 61.86 56.2 A 11.2 11.2 0 0 1 61.86 37.8 Z" fill="#0d9488"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-gray-900">Application SantéMap Algérie</h3>
+                    <p class="text-xs text-gray-500">Disponible sur Android & iOS (iPhone / iPad)</p>
+                </div>
+            </div>
+
+            <p class="text-xs text-gray-600 leading-relaxed mb-6">
+                Accédez à l'annuaire des médecins et pharmacies de garde directement depuis votre écran d'accueil, avec géolocalisation GPS en direct et sans connexion lente.
+            </p>
+
+            <div class="space-y-3">
+                <!-- Option 1 : Installation PWA Instantanée (Fonctionne sur tous les mobiles) -->
+                <button onclick="triggerPWAInstall()" class="w-full p-4 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center justify-between transition shadow-md group">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-bolt-lightning text-amber-300 text-xl"></i>
+                        <div class="text-left">
+                            <span class="block font-extrabold text-sm">Installer l'application sur cet appareil</span>
+                            <span class="text-[11px] text-teal-100 font-normal">Installation instantanée sans passer par les stores</span>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-down-to-bracket text-base group-hover:translate-y-0.5 transition"></i>
+                </button>
+
+                <!-- Option 2 : Android APK -->
+                <div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-brands fa-android text-emerald-600 text-2xl"></i>
+                        <div>
+                            <span class="text-xs font-bold text-gray-800 block">Version Android (APK / Play Store)</span>
+                            <span class="text-[10px] text-gray-500">Compatible Samsung, Xiaomi, Oppo, Realme...</span>
+                        </div>
+                    </div>
+                    <button onclick="alert('Pour compiler le fichier .APK final prêt à distribuer, suivez le guide Capacitor fourni sous le code !');" class="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition">
+                        Fichier APK
+                    </button>
+                </div>
+
+                <!-- Option 3 : Apple iOS -->
+                <div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-brands fa-apple text-slate-800 text-2xl"></i>
+                        <div>
+                            <span class="text-xs font-bold text-gray-800 block">Version iOS (iPhone & iPad)</span>
+                            <span class="text-[10px] text-gray-500">Sur Safari : Partager ⎋ > Sur l'écran d'accueil</span>
+                        </div>
+                    </div>
+                    <button onclick="alert('Sur Safari iPhone : Cliquez sur le bouton Partager (carré avec flèche vers le haut), puis faites défiler et touchez Sur l’écran d’accueil !');" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded-xl transition">
+                        Guide iPhone
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t text-center">
+                <span class="text-[11px] text-gray-400 font-medium">Application certifiée 100% sécurisée • Réseau Santé Algérie</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. TABLEAU DE BORD PERSONNEL DU PRATICIEN -->
+    <div id="dashboard-section" class="hidden max-w-5xl mx-auto px-4 py-8 w-full flex-1 animate-fade-in">
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+            <div class="bg-gradient-to-r from-teal-800 to-slate-900 p-6 sm:p-8 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div class="flex items-center space-x-4 rtl:space-x-reverse">
+                    <div class="w-16 h-16 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center text-teal-300 text-2xl border border-white/20">
+                        <i class="fa-solid fa-user-doctor"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-2xl font-black" id="dash-header-name">Dr. Mansouri</h2>
+                            <span class="text-[11px] bg-teal-500/30 text-teal-200 border border-teal-400/30 px-2 py-0.5 rounded-full font-bold">Compte Vérifié</span>
+                        </div>
+                        <p class="text-xs text-teal-200 mt-1" id="dash-header-sub">Cabinet Médical</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="viewMyPracticeOnMap()" class="bg-white text-teal-900 font-bold px-4 py-2.5 rounded-xl text-xs hover:bg-teal-50 transition shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-map-location-dot text-teal-600"></i> Voir ma fiche sur la carte
+                    </button>
+                    <button onclick="logoutUser()" class="bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-400/30 px-3 py-2.5 rounded-xl text-xs font-semibold transition">
+                        Déconnexion
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6 sm:p-8">
+                <div class="flex justify-between items-center pb-4 border-b mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Gestion de ma fiche publique</h3>
+                        <p class="text-xs text-gray-500">Mettez à jour vos coordonnées et informez les patients en direct.</p>
+                    </div>
+                    <span id="save-indicator" class="text-xs text-emerald-600 font-bold hidden flex items-center gap-1">
+                        <i class="fa-solid fa-check"></i> Données enregistrées !
+                    </span>
+                </div>
+
+                <form onsubmit="handleUpdateMyData(event)" class="space-y-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <label class="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-teal-400 transition">
+                            <input type="checkbox" id="dash-garde" class="w-5 h-5 rounded text-teal-600 focus:ring-teal-500">
+                            <div>
+                                <span class="text-xs font-bold text-gray-800 block">🌙 Assurer la garde (Nuit & Week-end)</span>
+                                <span class="text-[11px] text-gray-400">Votre fiche clignotera en vert sur la carte nationale</span>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-teal-400 transition">
+                            <input type="checkbox" id="dash-chifa" class="w-5 h-5 rounded text-teal-600 focus:ring-teal-500">
+                            <div>
+                                <span class="text-xs font-bold text-gray-800 block">💳 Conventionné Carte Chifa</span>
+                                <span class="text-[11px] text-gray-400">Remboursement CNAS / CASNOS disponible</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Nom / Enseigne</label>
+                            <input type="text" id="dash-name" required class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Spécialité / Titre</label>
+                            <input type="text" id="dash-spec" required class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Wilaya</label>
+                            <select id="dash-wilaya" required class="w-full border rounded-xl p-2.5 text-xs bg-white outline-none focus:ring-2 focus:ring-teal-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Téléphone</label>
+                            <input type="tel" id="dash-tel" required class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">WhatsApp</label>
+                            <input type="tel" id="dash-whatsapp" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Adresse complète</label>
+                            <input type="text" id="dash-addr" required class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">Horaires de travail</label>
+                            <input type="text" id="dash-horaires" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                        </div>
+                    </div>
+
+                    <div class="pt-4 flex justify-end gap-3">
+                        <button type="button" onclick="closeDashboard()" class="px-5 py-2.5 rounded-xl border text-xs font-semibold hover:bg-slate-100 transition">
+                            Fermer
+                        </button>
+                        <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition shadow-md flex items-center gap-1.5">
+                            <i class="fa-solid fa-floppy-disk"></i> Enregistrer les modifications
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. CONTENU PRINCIPAL PUBLIC (RECHERCHE & CARTE) -->
+    <div id="public-main-content">
+        <section class="bg-gradient-to-r from-teal-800 via-teal-900 to-slate-900 text-white py-8 px-4 shadow-inner">
+            <div class="max-w-7xl mx-auto">
+                <div class="mb-4">
+                    <h1 data-i18n="hero_title" class="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                        Trouvez un médecin ou une pharmacie en Algérie
+                    </h1>
+                    <p data-i18n="hero_desc" class="text-teal-200 text-xs sm:text-sm mt-1">
+                        Sélectionnez votre Wilaya, repérez les officines de garde de nuit et lancez votre itinéraire direct.
+                    </p>
+                </div>
+
+                <div class="bg-white p-2.5 rounded-2xl shadow-xl flex flex-col md:flex-row gap-2 text-gray-800">
+                    <div class="flex-1 flex items-center px-3 border-b md:border-b-0 md:border-r rtl:md:border-r-0 rtl:md:border-l border-gray-200">
+                        <i class="fa-solid fa-magnifying-glass text-teal-600 mx-2 text-sm"></i>
+                        <input id="search-input" oninput="applyFilters()" type="text" 
+                               data-i18n-ph="search_placeholder"
+                               placeholder="Nom du praticien, clinique, spécialité..." 
+                               class="w-full text-sm py-2 focus:outline-none bg-transparent">
+                    </div>
+                    
+                    <div class="w-full md:w-64 flex items-center px-3 border-b md:border-b-0 md:border-r rtl:md:border-r-0 rtl:md:border-l border-gray-200">
+                        <i class="fa-solid fa-location-dot text-teal-600 mx-2 text-sm"></i>
+                        <select id="wilaya-select" onchange="onWilayaChange()" class="w-full text-sm py-2 bg-white focus:outline-none cursor-pointer font-semibold text-gray-700"></select>
+                    </div>
+
+                    <button onclick="applyFilters()" data-i18n="btn_search" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold px-6 py-2.5 rounded-xl transition text-sm">
+                        Rechercher
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 mt-4 text-xs">
+                    <span data-i18n="filter_label" class="text-teal-200 font-medium mx-1">Filtres :</span>
+                    <button onclick="setTypeFilter('all')" id="pill-all" class="px-3.5 py-1.5 rounded-full bg-white text-teal-900 font-bold transition shadow-sm">
+                        <span data-i18n="filter_all">Tous</span> (<span id="total-badge">0</span>)
+                    </button>
+                    <button onclick="setTypeFilter('medecin')" id="pill-medecin" class="px-3.5 py-1.5 rounded-full bg-teal-800/80 hover:bg-teal-700 text-white font-medium transition border border-teal-600/40">
+                        👨‍⚕️ <span data-i18n="filter_doctors">Médecins</span>
+                    </button>
+                    <button onclick="setTypeFilter('pharmacie')" id="pill-pharmacie" class="px-3.5 py-1.5 rounded-full bg-teal-800/80 hover:bg-teal-700 text-white font-medium transition border border-teal-600/40">
+                        💊 <span data-i18n="filter_pharmacies">Pharmacies</span>
+                    </button>
+                    <button onclick="toggleGardeFilter()" id="pill-garde" class="px-3.5 py-1.5 rounded-full bg-teal-800/80 hover:bg-teal-700 text-white font-medium transition border border-teal-600/40 flex items-center gap-1.5">
+                        <span>🌙 <span data-i18n="filter_duty_only">De garde uniquement</span></span>
+                    </button>
+                    <button onclick="toggleChifaFilter()" id="pill-chifa" class="px-3.5 py-1.5 rounded-full bg-teal-800/80 hover:bg-teal-700 text-white font-medium transition border border-teal-600/40 flex items-center gap-1.5">
+                        <span>💳 <span data-i18n="filter_chifa_only">Carte Chifa acceptée</span></span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div class="lg:col-span-5 space-y-3">
+                    <div class="flex items-center justify-between pb-2 border-b">
+                        <span class="text-xs font-bold text-gray-500 uppercase tracking-wider" id="results-count">...</span>
+                        <span data-i18n="hint_click_card" class="text-[11px] text-teal-700 font-medium">Cliquez pour afficher sur la carte</span>
+                    </div>
+                    <div id="cards-container" class="space-y-3 max-h-[600px] overflow-y-auto pr-1.5 rtl:pr-0 rtl:pl-1.5"></div>
+                </div>
+
+                <div class="lg:col-span-7 sticky top-20">
+                    <div class="bg-white p-2.5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex flex-wrap items-center justify-between px-3 py-2 border-b mb-2 text-xs text-gray-600 font-medium gap-2">
+                            <span id="map-status"><i class="fa-solid fa-map-pin text-teal-600 mx-1"></i> <span data-i18n="active_wilaya">Wilaya active :</span> <strong>16 - Alger</strong></span>
+                            
+                            <div class="flex items-center space-x-1 rtl:space-x-reverse bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                <button id="btn-engine-gmap" onclick="switchMapEngine('gmap')" class="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-teal-800 shadow-sm transition">
+                                    <i class="fa-solid fa-globe text-teal-600 mx-1"></i> Google Maps
+                                </button>
+                                <button id="btn-engine-osm" onclick="switchMapEngine('osm')" class="px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 transition">
+                                    <i class="fa-solid fa-map text-slate-500 mx-1"></i> OpenStreetMap
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="map-container">
+                            <iframe id="gmap-iframe" loading="lazy" allowfullscreen src="https://maps.google.com/maps?q=36.7538,3.0588&z=14&output=embed"></iframe>
+                            <div id="leaflet-map" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 5. MODAL CONNEXION PRATICIEN -->
+    <div id="login-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-gray-100 text-start">
+            <div class="flex justify-between items-center pb-3 border-b mb-4">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900">Espace Praticien</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Accédez à votre compte pour modifier vos données.</p>
+                </div>
+                <button onclick="closeModal('login-modal')" class="text-gray-400 hover:text-gray-600 text-xl font-bold p-1">&times;</button>
+            </div>
+
+            <form onsubmit="handleUserLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Adresse Email</label>
+                    <input id="login-email" type="email" required placeholder="contact@cabinet-docteur.dz" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Mot de passe</label>
+                    <input id="login-password" type="password" required placeholder="••••••••" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+                <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition text-xs shadow-md">
+                    Se connecter à mon compte
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 6. MODAL INSCRIPTION PRATICIEN -->
+    <div id="register-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto text-start">
+            <div class="flex justify-between items-center pb-3 border-b mb-4">
+                <div>
+                    <h3 data-i18n="modal_title" class="text-xl font-bold text-gray-900">Inscrire un Cabinet ou une Pharmacie</h3>
+                    <p data-i18n="modal_subtitle" class="text-xs text-gray-500 mt-0.5">Votre compte sera créé et votre structure apparaîtra immédiatement.</p>
+                </div>
+                <button onclick="closeModal('register-modal')" class="text-gray-400 hover:text-gray-600 text-xl font-bold p-1">&times;</button>
+            </div>
+
+            <form onsubmit="handleNewPractitioner(event)" class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label data-i18n="modal_type" class="block text-xs font-bold text-gray-700 mb-1">Type d'activité</label>
+                        <select id="new-type" required class="w-full border rounded-xl p-2.5 text-xs bg-white outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="medecin">Cabinet Médical / Spécialiste</option>
+                            <option value="pharmacie">Pharmacie d'officine</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label data-i18n="modal_name" class="block text-xs font-bold text-gray-700 mb-1">Nom du praticien ou Pharmacie</label>
+                        <input id="new-name" type="text" required placeholder="Ex: Dr. Mansouri ou Pharmacie Centrale" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Adresse Email</label>
+                        <input id="new-email" type="email" required placeholder="contact@cabinet-docteur.dz" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Mot de passe pour mon compte</label>
+                        <input id="new-password" type="password" required placeholder="••••••••" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Spécialité</label>
+                        <input id="new-specialite" type="text" required placeholder="Ex: Cardiologue, Pédiatre..." class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Wilaya</label>
+                        <select id="new-wilaya" required class="w-full border rounded-xl p-2.5 text-xs bg-white outline-none focus:ring-2 focus:ring-teal-500"></select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Adresse complète</label>
+                    <input id="new-adresse" type="text" required placeholder="Ex: 14 Rue Didouche Mourad, Alger" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Téléphone</label>
+                        <input id="new-tel" type="tel" required placeholder="021 63 12 12" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">WhatsApp</label>
+                        <input id="new-whatsapp" type="tel" placeholder="213550123456" class="w-full border rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                    <label class="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-700">
+                        <input type="checkbox" id="new-chifa" class="rounded text-teal-600 focus:ring-teal-500 w-4 h-4">
+                        <span>Conventionné Sécurité Sociale (Carte Chifa acceptée)</span>
+                    </label>
+                    <label class="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-gray-700">
+                        <input type="checkbox" id="new-garde" class="rounded text-teal-600 focus:ring-teal-500 w-4 h-4">
+                        <span>Pharmacie / Cabinet assurant le service de garde (Nuit / Week-end)</span>
+                    </label>
+                </div>
+
+                <button id="submit-btn" type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition shadow-md text-sm">
+                    Créer mon compte et publier ma fiche
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 7. PIED DE PAGE AVEC LIENS VERS LES SITES OFFICIELS -->
+    <footer class="bg-slate-900 text-slate-300 border-t border-slate-800 mt-auto text-start">
+        <div class="max-w-7xl mx-auto px-4 py-12">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                
+                <div class="space-y-3">
+                    <div class="flex items-center space-x-2.5 rtl:space-x-reverse">
+                        <div class="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                            <svg viewBox="0 0 100 100" class="w-full h-full">
+                                <rect width="100" height="100" rx="22" fill="#0d9488"/>
+                                <path d="M 27 41 L 27 65 A 9 9 0 0 0 36 74 L 54 74" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round"/>
+                                <path d="M 42 27 L 62 27 A 8 8 0 0 1 70 35 L 70 54 A 4 4 0 0 1 68.8 56.8 L 59.8 65.8 A 4 4 0 0 1 57 67 L 42 67 A 8 8 0 0 1 34 59 L 34 35 A 8 8 0 0 1 42 27 Z" fill="#FFFFFF"/>
+                                <path d="M 61.86 37.8 A 13.5 13.5 0 1 0 61.86 56.2 A 11.2 11.2 0 0 1 61.86 37.8 Z" fill="#0d9488"/>
+                            </svg>
+                        </div>
+                        <span class="text-lg font-black text-white">Santé<span class="text-teal-400">Map</span> Algérie</span>
+                    </div>
+                    <p data-i18n="footer_about_text" class="text-xs text-slate-400 leading-relaxed">
+                        Plateforme citoyenne et publique d'orientation médicale et pharmaceutique en Algérie.
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-white border-b border-slate-800 pb-2">
+                        <i class="fa-solid fa-phone-volume text-red-400 mx-1.5"></i> Urgences & Secours
+                    </h3>
+                    <ul class="space-y-2 text-xs">
+                        <li class="flex justify-between items-center bg-slate-800/60 p-2 rounded-lg">
+                            <span>Protection Civile</span>
+                            <a href="tel:14" class="font-bold text-red-400">14</a>
+                        </li>
+                        <li class="flex justify-between items-center bg-slate-800/60 p-2 rounded-lg">
+                            <span>SAMU</span>
+                            <a href="tel:1021" class="font-bold text-amber-400">1021</a>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- LIENS OFFICIELS CLIQUABLES -->
+                <div class="space-y-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-white border-b border-slate-800 pb-2">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-teal-400 mx-1.5"></i> Organismes de Santé
+                    </h3>
+                    <ul class="space-y-2 text-xs text-slate-400">
+                        <li><a href="https://www.sante.gov.dz" target="_blank" rel="noopener" class="hover:text-teal-300 transition flex items-center justify-between"><span>Ministère de la Santé</span> ↗</a></li>
+                        <li><a href="https://www.cnas.dz" target="_blank" rel="noopener" class="hover:text-teal-300 transition flex items-center justify-between"><span>CNAS (Carte Chifa)</span> ↗</a></li>
+                        <li><a href="https://damancom.casnos.dz" target="_blank" rel="noopener" class="hover:text-teal-300 transition flex items-center justify-between"><span>CASNOS</span> ↗</a></li>
+                        <li><a href="https://www.sorm-alger.dz" target="_blank" rel="noopener" class="hover:text-teal-300 transition flex items-center justify-between"><span>Ordre des Médecins</span> ↗</a></li>
+                        <li><a href="https://www.snapo-dz.net" target="_blank" rel="noopener" class="hover:text-teal-300 transition flex items-center justify-between"><span>Ordre des Pharmaciens</span> ↗</a></li>
+                    </ul>
+                </div>
+
+                <div class="space-y-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-white border-b border-slate-800 pb-2">
+                        <i class="fa-solid fa-mobile-screen text-teal-400 mx-1.5"></i> Application Mobile
+                    </h3>
+                    <p class="text-xs text-slate-400">Installez l'application sur votre smartphone Android ou iPhone.</p>
+                    <button onclick="openModal('download-modal')" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-download"></i> Télécharger l'application
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="border-t border-slate-800 bg-slate-950 py-5 px-4 text-xs">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-center sm:text-start">
+                <p class="text-slate-500">© 2026 SantéMap Algérie — Service d'information sanitaire publique. Tous droits réservés.</p>
+                <div class="px-4 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-300 font-medium">
+                    Site créé par <strong class="text-teal-400 font-bold">BENSALAH Badis</strong>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- SCRIPT JAVASCRIPT COMPLET -->
+    <script>
+        // PWA INSTALLATION INTERACTIVE
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+
+        function triggerPWAInstall() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choice) => {
+                    if (choice.outcome === 'accepted') {
+                        closeModal('download-modal');
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                alert("Sur Android : Ouvrez le menu de Chrome (3 points) et touchez 'Installer l\\'application'.\n\nSur iPhone : Ouvrez Safari, appuyez sur Partager (icône ⎋) puis 'Sur l\\'écran d\\'accueil'.");
+            }
+        }
+
+        // SPLASH SCREEN
+        function endSplashScreen() {
+            const splash = document.getElementById('splash-screen');
+            if (!splash) return;
+            splash.style.opacity = '0';
+            splash.style.visibility = 'hidden';
+            setTimeout(() => {
+                splash.remove();
+                if (leafletMap) leafletMap.invalidateSize();
+            }, 800);
+        }
+        window.addEventListener('load', () => { setTimeout(endSplashScreen, 3500); });
+
+        // BASE DE DONNÉES & 58 WILAYAS
+        const defaultData = [
+            {
+                id: 1,
+                name: "Dr. Karim Benali",
+                type: "medecin",
+                specialite: "Cardiologue",
+                wilaya: "16",
+                adresse: "18 Rue Didouche Mourad, Alger Centre",
+                tel: "021 63 12 12",
+                whatsapp: "213550112233",
+                email: "dr.benali@santemap.dz",
+                password: "123",
+                horaires: "Samedi - Jeudi : 08h30 - 16h00",
+                garde: false,
+                chifa: true,
+                lat: 36.7680,
+                lng: 3.0550
+            },
+            {
+                id: 2,
+                name: "Pharmacie El Chifa (Centrale)",
+                type: "pharmacie",
+                specialite: "Officine de garde",
+                wilaya: "16",
+                adresse: "Boulevard Colonel Amirouche, Alger",
+                tel: "021 73 45 45",
+                whatsapp: "213550998877",
+                email: "chifa@santemap.dz",
+                password: "123",
+                horaires: "24h/24 - 7j/7",
+                garde: true,
+                chifa: true,
+                lat: 36.7725,
+                lng: 3.0601
+            }
+        ];
+
+        let practitioners = JSON.parse(localStorage.getItem('santemap_final_db')) || defaultData;
+        let loggedUser = JSON.parse(localStorage.getItem('santemap_logged_user')) || null;
+
+        const wilayas58 = [
+            { code: "01", fr: "01 - Adrar", ar: "01 - أدرار", en: "01 - Adrar", lat: 27.8744, lng: -0.2939 },
+            { code: "02", fr: "02 - Chlef", ar: "02 - الشلف", en: "02 - Chlef", lat: 36.1654, lng: 1.3345 },
+            { code: "03", fr: "03 - Laghouat", ar: "03 - الأغواط", en: "03 - Laghouat", lat: 33.8000, lng: 2.8651 },
+            { code: "04", fr: "04 - Oum El Bouaghi", ar: "04 - أم البواقي", en: "04 - Oum El Bouaghi", lat: 35.8756, lng: 7.1136 },
+            { code: "05", fr: "05 - Batna", ar: "05 - باتنة", en: "05 - Batna", lat: 35.5558, lng: 6.1741 },
+            { code: "06", fr: "06 - Béjaïa", ar: "06 - بجاية", en: "06 - Bejaia", lat: 36.7559, lng: 5.0843 },
+            { code: "07", fr: "07 - Biskra", ar: "07 - بسكرة", en: "07 - Biskra", lat: 34.8504, lng: 5.7281 },
+            { code: "08", fr: "08 - Béchar", ar: "08 - بشار", en: "08 - Bechar", lat: 31.6167, lng: -2.2167 },
+            { code: "09", fr: "09 - Blida", ar: "09 - البليدة", en: "09 - Blida", lat: 36.4700, lng: 2.8300 },
+            { code: "10", fr: "10 - Bouira", ar: "10 - البويرة", en: "10 - Bouira", lat: 36.3749, lng: 3.9020 },
+            { code: "11", fr: "11 - Tamanrasset", ar: "11 - تمنراست", en: "11 - Tamanrasset", lat: 22.7850, lng: 5.5228 },
+            { code: "12", fr: "12 - Tébessa", ar: "12 - تبسة", en: "12 - Tebessa", lat: 35.4042, lng: 8.1242 },
+            { code: "13", fr: "13 - Tlemcen", ar: "13 - تلمسان", en: "13 - Tlemcen", lat: 34.8783, lng: -1.3150 },
+            { code: "14", fr: "14 - Tiaret", ar: "14 - تيارت", en: "14 - Tiaret", lat: 35.3710, lng: 1.3170 },
+            { code: "15", fr: "15 - Tizi Ouzou", ar: "15 - تيزي وزو", en: "15 - Tizi Ouzou", lat: 36.7118, lng: 4.0459 },
+            { code: "16", fr: "16 - Alger", ar: "16 - الجزائر", en: "16 - Algiers", lat: 36.7538, lng: 3.0588 },
+            { code: "17", fr: "17 - Djelfa", ar: "17 - الجلفة", en: "17 - Djelfa", lat: 34.6728, lng: 3.2630 },
+            { code: "18", fr: "18 - Jijel", ar: "18 - جيجل", en: "18 - Jijel", lat: 36.8206, lng: 5.7667 },
+            { code: "19", fr: "19 - Sétif", ar: "19 - سطيف", en: "19 - Setif", lat: 36.1905, lng: 5.4137 },
+            { code: "20", fr: "20 - Saïda", ar: "20 - سعيدة", en: "20 - Saida", lat: 34.8303, lng: 0.1517 },
+            { code: "21", fr: "21 - Skikda", ar: "21 - سكيكدة", en: "21 - Skikda", lat: 36.8792, lng: 6.9070 },
+            { code: "22", fr: "22 - Sidi Bel Abbès", ar: "22 - سيدي بلعباس", en: "22 - Sidi Bel Abbes", lat: 35.1899, lng: -0.6308 },
+            { code: "23", fr: "23 - Annaba", ar: "23 - عنابة", en: "23 - Annaba", lat: 36.9000, lng: 7.7667 },
+            { code: "24", fr: "24 - Guelma", ar: "24 - قالمة", en: "24 - Guelma", lat: 36.4621, lng: 7.4261 },
+            { code: "25", fr: "25 - Constantine", ar: "25 - قسنطينة", en: "25 - Constantine", lat: 36.3650, lng: 6.6147 },
+            { code: "26", fr: "26 - Médéa", ar: "26 - المدية", en: "26 - Medea", lat: 36.2642, lng: 2.7539 },
+            { code: "27", fr: "27 - Mostaganem", ar: "27 - مستغانم", en: "27 - Mostaganem", lat: 35.9312, lng: 0.0892 },
+            { code: "28", fr: "28 - M'Sila", ar: "28 - المسيلة", en: "28 - M'Sila", lat: 35.7058, lng: 4.5419 },
+            { code: "29", fr: "29 - Mascara", ar: "29 - معسكر", en: "29 - Mascara", lat: 35.3966, lng: 0.1403 },
+            { code: "30", fr: "30 - Ouargla", ar: "30 - ورقلة", en: "30 - Ouargla", lat: 31.9493, lng: 5.3250 },
+            { code: "31", fr: "31 - Oran", ar: "31 - وهران", en: "31 - Oran", lat: 35.6987, lng: -0.6349 },
+            { code: "32", fr: "32 - El Bayadh", ar: "32 - البيض", en: "32 - El Bayadh", lat: 33.6832, lng: 1.0193 },
+            { code: "33", fr: "33 - Illizi", ar: "33 - إليزي", en: "33 - Illizi", lat: 26.4833, lng: 8.4667 },
+            { code: "34", fr: "34 - Bordj Bou Arreridj", ar: "34 - برج بوعريريج", en: "34 - Bordj Bou Arreridj", lat: 36.0732, lng: 4.7611 },
+            { code: "35", fr: "35 - Boumerdès", ar: "35 - بومرداس", en: "35 - Boumerdes", lat: 36.7599, lng: 3.4735 },
+            { code: "36", fr: "36 - El Tarf", ar: "36 - الطارف", en: "36 - El Tarf", lat: 36.7672, lng: 8.3138 },
+            { code: "37", fr: "37 - Tindouf", ar: "37 - تندوف", en: "37 - Tindouf", lat: 27.6711, lng: -8.1474 },
+            { code: "38", fr: "38 - Tissemsilt", ar: "38 - تيسمسيلت", en: "38 - Tissemsilt", lat: 35.6072, lng: 1.8108 },
+            { code: "39", fr: "39 - El Oued", ar: "39 - الوادي", en: "39 - El Oued", lat: 33.3683, lng: 6.8675 },
+            { code: "40", fr: "40 - Khenchela", ar: "40 - خنشلة", en: "40 - Khenchela", lat: 35.4358, lng: 7.1433 },
+            { code: "41", fr: "41 - Souk Ahras", ar: "41 - سوق أهراس", en: "41 - Souk Ahras", lat: 36.2864, lng: 7.9511 },
+            { code: "42", fr: "42 - Tipaza", ar: "42 - تيبازة", en: "42 - Tipaza", lat: 36.5897, lng: 2.4475 },
+            { code: "43", fr: "43 - Mila", ar: "43 - ميلة", en: "43 - Mila", lat: 36.4503, lng: 6.2644 },
+            { code: "44", fr: "44 - Aïn Defla", ar: "44 - عين الدفلى", en: "44 - Ain Defla", lat: 36.2641, lng: 1.9679 },
+            { code: "45", fr: "45 - Naâma", ar: "45 - النعامة", en: "45 - Naama", lat: 33.2667, lng: -0.3167 },
+            { code: "46", fr: "46 - Aïn Témouchent", ar: "46 - عين تموشنت", en: "46 - Ain Temouchent", lat: 35.2975, lng: -1.1404 },
+            { code: "47", fr: "47 - Ghardaïa", ar: "47 - غرداية", en: "47 - Ghardaia", lat: 32.4909, lng: 3.6735 },
+            { code: "48", fr: "48 - Relizane", ar: "48 - غليزان", en: "48 - Relizane", lat: 35.7373, lng: 0.5558 },
+            { code: "49", fr: "49 - Timimoun", ar: "49 - تيميمون", en: "49 - Timimoun", lat: 29.2639, lng: 0.2310 },
+            { code: "50", fr: "50 - Bordj Badji Mokhtar", ar: "50 - برج باجي مختار", en: "50 - Bordj Badji Mokhtar", lat: 21.3283, lng: 0.9547 },
+            { code: "51", fr: "51 - Ouled Djellal", ar: "51 - أولاد جلال", en: "51 - Ouled Djellal", lat: 34.4278, lng: 5.0658 },
+            { code: "52", fr: "52 - Béni Abbès", ar: "52 - بني عباس", en: "52 - Beni Abbes", lat: 30.1333, lng: -2.1667 },
+            { code: "53", fr: "53 - In Salah", ar: "53 - عين صالح", en: "53 - In Salah", lat: 27.1935, lng: 2.4607 },
+            { code: "54", fr: "54 - In Guezzam", ar: "54 - عين قزام", en: "54 - In Guezzam", lat: 19.5694, lng: 5.7694 },
+            { code: "55", fr: "55 - Touggourt", ar: "55 - تقرت", en: "55 - Touggourt", lat: 33.1070, lng: 6.0600 },
+            { code: "56", fr: "56 - Djanet", ar: "56 - جانت", en: "56 - Djanet", lat: 24.5539, lng: 9.4853 },
+            { code: "57", fr: "57 - El M'Ghair", ar: "57 - المغير", en: "57 - El M'Ghair", lat: 33.9489, lng: 5.9222 },
+            { code: "58", fr: "58 - El Meniaa", ar: "58 - المنيعة", en: "58 - El Meniaa", lat: 30.5833, lng: 2.8833 }
+        ];
+
+        let currentLang = localStorage.getItem('santemap_lang') || 'fr';
+        let currentMapEngine = 'gmap';
+        let activeType = 'all';
+        let filterGarde = false;
+        let filterChifa = false;
+        let leafletMap = null;
+        let leafletMarkersGroup = null;
+
+        function updateAuthUI() {
+            const authZone = document.getElementById('auth-buttons-zone');
+            const userZone = document.getElementById('logged-user-zone');
+            const userNameSpan = document.getElementById('nav-user-name');
+            if (loggedUser) {
+                authZone.classList.add('hidden');
+                userZone.classList.remove('hidden');
+                userNameSpan.innerText = loggedUser.name;
+            } else {
+                authZone.classList.remove('hidden');
+                userZone.classList.add('hidden');
+            }
+        }
+
+        function openDashboard() {
+            if (!loggedUser) return;
+            document.getElementById('public-main-content').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+            document.getElementById('dash-header-name').innerText = loggedUser.name;
+            document.getElementById('dash-header-sub').innerText = `${loggedUser.specialite} • ${loggedUser.adresse}`;
+            document.getElementById('dash-name').value = loggedUser.name;
+            document.getElementById('dash-spec').value = loggedUser.specialite;
+            document.getElementById('dash-wilaya').value = loggedUser.wilaya;
+            document.getElementById('dash-tel').value = loggedUser.tel;
+            document.getElementById('dash-whatsapp').value = loggedUser.whatsapp || '';
+            document.getElementById('dash-addr').value = loggedUser.adresse;
+            document.getElementById('dash-horaires').value = loggedUser.horaires || '';
+            document.getElementById('dash-garde').checked = !!loggedUser.garde;
+            document.getElementById('dash-chifa').checked = !!loggedUser.chifa;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function closeDashboard() {
+            document.getElementById('dashboard-section').classList.add('hidden');
+            document.getElementById('public-main-content').classList.remove('hidden');
+            if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 200);
+        }
+
+        function handleUpdateMyData(e) {
+            e.preventDefault();
+            if (!loggedUser) return;
+            loggedUser.name = document.getElementById('dash-name').value;
+            loggedUser.specialite = document.getElementById('dash-spec').value;
+            loggedUser.wilaya = document.getElementById('dash-wilaya').value;
+            loggedUser.tel = document.getElementById('dash-tel').value;
+            loggedUser.whatsapp = document.getElementById('dash-whatsapp').value;
+            loggedUser.adresse = document.getElementById('dash-addr').value;
+            loggedUser.horaires = document.getElementById('dash-horaires').value;
+            loggedUser.garde = document.getElementById('dash-garde').checked;
+            loggedUser.chifa = document.getElementById('dash-chifa').checked;
+
+            const index = practitioners.findIndex(p => p.id === loggedUser.id);
+            if (index !== -1) practitioners[index] = { ...loggedUser };
+            else practitioners.unshift(loggedUser);
+
+            localStorage.setItem('santemap_final_db', JSON.stringify(practitioners));
+            localStorage.setItem('santemap_logged_user', JSON.stringify(loggedUser));
+
+            updateAuthUI();
+            applyFilters();
+
+            const ind = document.getElementById('save-indicator');
+            ind.classList.remove('hidden');
+            setTimeout(() => ind.classList.add('hidden'), 3000);
+        }
+
+        function viewMyPracticeOnMap() {
+            closeDashboard();
+            if (loggedUser) {
+                document.getElementById('wilaya-select').value = loggedUser.wilaya;
+                onWilayaChange();
+                if (currentMapEngine === 'gmap') {
+                    updateGmapView(loggedUser.lat, loggedUser.lng, loggedUser.name);
+                } else if (leafletMap) {
+                    leafletMap.flyTo([loggedUser.lat, loggedUser.lng], 16);
+                }
+            }
+        }
+
+        function handleUserLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value.trim().toLowerCase();
+            const pass = document.getElementById('login-password').value;
+            const found = practitioners.find(p => p.email && p.email.toLowerCase() === email && p.password === pass);
+
+            if (found) {
+                loggedUser = found;
+                localStorage.setItem('santemap_logged_user', JSON.stringify(loggedUser));
+                closeModal('login-modal');
+                updateAuthUI();
+                openDashboard();
+            } else {
+                alert("Identifiants incorrects.");
+            }
+        }
+
+        function logoutUser() {
+            loggedUser = null;
+            localStorage.removeItem('santemap_logged_user');
+            updateAuthUI();
+            closeDashboard();
+        }
+
+        function handleNewPractitioner(e) {
+            e.preventDefault();
+            const wCode = document.getElementById('new-wilaya').value;
+            const wInfo = wilayas58.find(w => w.code === wCode);
+
+            const newDoc = {
+                id: Date.now(),
+                name: document.getElementById('new-name').value,
+                email: document.getElementById('new-email').value,
+                password: document.getElementById('new-password').value,
+                type: document.getElementById('new-type').value,
+                specialite: document.getElementById('new-specialite').value,
+                wilaya: wCode,
+                adresse: document.getElementById('new-adresse').value,
+                tel: document.getElementById('new-tel').value,
+                whatsapp: document.getElementById('new-whatsapp').value,
+                horaires: "08h30 - 16h30",
+                garde: document.getElementById('new-garde').checked,
+                chifa: document.getElementById('new-chifa').checked,
+                lat: wInfo.lat + (Math.random() - 0.5) * 0.02,
+                lng: wInfo.lng + (Math.random() - 0.5) * 0.02
+            };
+
+            practitioners.unshift(newDoc);
+            localStorage.setItem('santemap_final_db', JSON.stringify(practitioners));
+            loggedUser = newDoc;
+            localStorage.setItem('santemap_logged_user', JSON.stringify(loggedUser));
+
+            closeModal('register-modal');
+            e.target.reset();
+            updateAuthUI();
+            document.getElementById('wilaya-select').value = wCode;
+            onWilayaChange();
+            openDashboard();
+        }
+
+        function switchMapEngine(engine) {
+            currentMapEngine = engine;
+            const iframe = document.getElementById('gmap-iframe');
+            const leafletDiv = document.getElementById('leaflet-map');
+            const btnGmap = document.getElementById('btn-engine-gmap');
+            const btnOsm = document.getElementById('btn-engine-osm');
+
+            if (engine === 'gmap') {
+                iframe.style.display = 'block';
+                leafletDiv.style.display = 'none';
+                btnGmap.className = "px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-teal-800 shadow-sm transition";
+                btnOsm.className = "px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 transition";
+                updateGmapView();
+            } else {
+                iframe.style.display = 'none';
+                leafletDiv.style.display = 'block';
+                btnOsm.className = "px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-teal-800 shadow-sm transition";
+                btnGmap.className = "px-2.5 py-1 rounded-md text-[11px] font-medium text-gray-600 hover:text-gray-900 transition";
+                if (!leafletMap) initLeaflet();
+                else leafletMap.invalidateSize();
+            }
+        }
+
+        function updateGmapView(targetLat, targetLng, label) {
+            const iframe = document.getElementById('gmap-iframe');
+            let lat = targetLat;
+            let lng = targetLng;
+
+            if (!lat || !lng) {
+                const wCode = document.getElementById('wilaya-select').value;
+                const w = wilayas58.find(x => x.code === wCode);
+                lat = w ? w.lat : 36.7538;
+                lng = w ? w.lng : 3.0588;
+            }
+
+            const query = label ? encodeURIComponent(label + ", Algerie") : `${lat},${lng}`;
+            iframe.src = `https://maps.google.com/maps?q=${query}&z=14&output=embed`;
+        }
+
+        function initLeaflet() {
+            try {
+                if (typeof L === 'undefined') return;
+                const wCode = document.getElementById('wilaya-select').value;
+                const w = wilayas58.find(x => x.code === wCode);
+
+                leafletMap = L.map('leaflet-map').setView([w.lat, w.lng], 13);
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(leafletMap);
+                leafletMarkersGroup = L.layerGroup().addTo(leafletMap);
+                setTimeout(() => { leafletMap.invalidateSize(); }, 200);
+            } catch(e) { console.warn(e); }
+        }
+
+        function applyFilters() {
+            const list = document.getElementById('cards-container');
+            const keyword = document.getElementById('search-input').value.toLowerCase().trim();
+            const currentWilaya = document.getElementById('wilaya-select').value;
+
+            list.innerHTML = '';
+            if (leafletMarkersGroup) leafletMarkersGroup.clearLayers();
+
+            const filtered = practitioners.filter(p => {
+                const matchWilaya = (p.wilaya === currentWilaya);
+                const matchType = (activeType === 'all') || (p.type === activeType);
+                const matchGarde = !filterGarde || p.garde;
+                const matchChifa = !filterChifa || p.chifa;
+                const matchSearch = p.name.toLowerCase().includes(keyword) || p.specialite.toLowerCase().includes(keyword) || p.adresse.toLowerCase().includes(keyword);
+                return matchWilaya && matchType && matchGarde && matchChifa && matchSearch;
+            });
+
+            document.getElementById('results-count').innerText = `${filtered.length} résultat(s)`;
+            document.getElementById('total-badge').innerText = filtered.length;
+
+            if (filtered.length === 0) {
+                list.innerHTML = `<div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-300 p-6"><p class="text-sm font-semibold text-gray-600">Aucun résultat trouvé dans cette Wilaya.</p></div>`;
+                return;
+            }
+
+            filtered.forEach(p => {
+                const isPharm = p.type === 'pharmacie';
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-teal-500 transition cursor-pointer group text-start";
+                card.onclick = () => {
+                    if (currentMapEngine === 'gmap') updateGmapView(p.lat, p.lng, p.name);
+                    else if (leafletMap) leafletMap.flyTo([p.lat, p.lng], 16);
+                    document.getElementById('map-status').innerHTML = `<i class="fa-solid fa-location-dot text-teal-600 mx-1.5"></i> <strong>${p.name}</strong> - ${p.adresse}`;
+                };
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start space-x-3 rtl:space-x-reverse">
+                            <div class="w-10 h-10 ${isPharm ? 'bg-emerald-600' : 'bg-blue-600'} text-white rounded-xl flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                                <i class="fa-solid ${isPharm ? 'fa-prescription-bottle-medical' : 'fa-user-doctor'} text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-gray-900 text-sm group-hover:text-teal-600 transition">${p.name}</h3>
+                                <p class="text-xs text-gray-500 font-medium">${p.specialite}</p>
+                                <p class="text-[11px] text-gray-400 mt-1 flex items-center"><i class="fa-solid fa-location-dot mx-1.5 text-teal-600"></i>${p.adresse}</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-end gap-1">
+                            ${p.garde ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 pulse-badge">De Garde 🟢</span>' : '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Ouvert</span>'}
+                            ${p.chifa ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">Carte Chifa</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t flex items-center justify-between text-xs text-gray-600">
+                        <a href="tel:${p.tel}" onclick="event.stopPropagation()" class="font-bold hover:text-teal-600 flex items-center"><i class="fa-solid fa-phone mx-1.5 text-teal-600"></i>${p.tel}</a>
+                        <div class="flex items-center gap-1.5">
+                            ${p.whatsapp ? `<a href="https://wa.me/${p.whatsapp}" target="_blank" onclick="event.stopPropagation()" class="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg text-xs font-semibold"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
+                            <a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" onclick="event.stopPropagation()" class="text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1"><i class="fa-solid fa-diamond-turn-right text-teal-600"></i> Itinéraire</a>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function onWilayaChange() {
+            const wCode = document.getElementById('wilaya-select').value;
+            const target = wilayas58.find(w => w.code === wCode);
+            if (target) {
+                const label = target[currentLang] || target.fr;
+                document.getElementById('map-status').innerHTML = `<i class="fa-solid fa-map-pin text-teal-600 mx-1.5"></i> Wilaya active : <strong>${label}</strong>`;
+                if (currentMapEngine === 'gmap') updateGmapView(target.lat, target.lng);
+                else if (leafletMap) leafletMap.flyTo([target.lat, target.lng], 13);
+            }
+            applyFilters();
+        }
+
+        function setTypeFilter(type) {
+            activeType = type;
+            ['all', 'medecin', 'pharmacie'].forEach(t => {
+                const btn = document.getElementById(`pill-${t}`);
+                if (t === type) btn.className = "px-3.5 py-1.5 rounded-full bg-white text-teal-900 font-bold transition shadow-sm";
+                else btn.className = "px-3.5 py-1.5 rounded-full bg-teal-800/80 hover:bg-teal-700 text-white font-medium transition border border-teal-600/40";
+            });
+            applyFilters();
+        }
+
+        function toggleGardeFilter() {
+            filterGarde = !filterGarde;
+            const btn = document.getElementById('pill-garde');
+            btn.classList.toggle('bg-white', filterGarde);
+            btn.classList.toggle('text-teal-950', filterGarde);
+            btn.classList.toggle('font-bold', filterGarde);
+            applyFilters();
+        }
+
+        function toggleChifaFilter() {
+            filterChifa = !filterChifa;
+            const btn = document.getElementById('pill-chifa');
+            btn.classList.toggle('bg-white', filterChifa);
+            btn.classList.toggle('text-teal-950', filterChifa);
+            btn.classList.toggle('font-bold', filterChifa);
+            applyFilters();
+        }
+
+        function resetAllFilters() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('wilaya-select').value = "16";
+            activeType = 'all';
+            filterGarde = false;
+            filterChifa = false;
+            setTypeFilter('all');
+            onWilayaChange();
+        }
+
+        function locateUserGPS() {
+            if (!("geolocation" in navigator)) { alert("GPS non supporté."); return; }
+            navigator.geolocation.getCurrentPosition(pos => {
+                updateGmapView(pos.coords.latitude, pos.coords.longitude, "Votre position");
+                document.getElementById('map-status').innerHTML = `<i class="fa-solid fa-location-crosshairs text-blue-600 mx-1.5"></i> GPS OK`;
+            }, () => alert("Veuillez autoriser l'accès GPS."));
+        }
+
+        function populateWilayas() {
+            const selects = ['wilaya-select', 'new-wilaya', 'dash-wilaya'];
+            selects.forEach(sId => {
+                const el = document.getElementById(sId);
+                if (!el) return;
+                const cur = el.value || "16";
+                el.innerHTML = '';
+                wilayas58.forEach(w => {
+                    const opt = document.createElement('option');
+                    opt.value = w.code;
+                    opt.textContent = w[currentLang] || w.fr;
+                    if (w.code === cur) opt.selected = true;
+                    el.appendChild(opt);
+                });
+            });
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('santemap_lang', lang);
+            document.documentElement.lang = lang;
+            document.documentElement.dir = (lang === 'ar') ? 'rtl' : 'ltr';
+
+            ['fr', 'ar', 'en'].forEach(l => {
+                const btn = document.getElementById(`lang-btn-${l}`);
+                if (l === lang) btn.className = "px-2.5 py-1 rounded-lg bg-teal-600 text-white shadow-sm transition";
+                else btn.className = "px-2 py-1 rounded-lg text-gray-600 hover:text-gray-900 transition";
+            });
+
+            populateWilayas();
+            applyFilters();
+        }
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            populateWilayas();
+            updateAuthUI();
+            setLanguage(currentLang);
+        });
+    </script>
+</body>
+</html>
